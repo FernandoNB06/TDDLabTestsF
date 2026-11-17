@@ -3,6 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'cross-spawn';
 import { getLastTestId } from './id_execution_tests_commit.js';
+import {
+  appendBranchSyncExecution,
+  getCurrentBranch,
+  getLegacyTddLogFilePath,
+} from './branchSyncExecution.js';
 
 const COMMAND = 'jest';
 const args = ['--json', '--outputFile=./script/report.json'];
@@ -10,7 +15,7 @@ const args = ['--json', '--outputFile=./script/report.json'];
 function runCommand(command, args) {
   return new Promise((resolve, reject) => {
     const process = spawn(command, args, { stdio: 'inherit' });
-    process.on('close', (code) => {
+    process.on('close', () => {
       resolve();
     });
   });
@@ -32,20 +37,27 @@ const ensureFileExists = (filePath, initialData) => {
   }
 };
 
-const extractAndAddObject = async (reportFile, tddLogFile) => {
+const extractAndAddObject = async (reportFile, tddLogFile = null) => {
   try {
     await runCommand(COMMAND, args);
 
-    ensureFileExists(tddLogFile, []);
+    const __filename = fileURLToPath(import.meta.url);
+    const scriptDirectory = path.dirname(__filename);
+    const repoRoot = path.resolve(scriptDirectory, '..');
+    const branchName = getCurrentBranch(repoRoot);
+    const resolvedTddLogFile = tddLogFile ?? getLegacyTddLogFilePath(scriptDirectory, branchName);
+
+    ensureFileExists(resolvedTddLogFile, []);
 
     const jsonData = readJSONFile(reportFile);
     const passedTests = jsonData.numPassedTests;
-    const failedTests = jsonData.numFailedTests; 
+    const failedTests = jsonData.numFailedTests;
     const totalTests = jsonData.numTotalTests;
     const startTime = jsonData.startTime;
     const success = jsonData.success;
-    let testId = getLastTestId(tddLogFile);
+    const testId = getLastTestId(resolvedTddLogFile);
 
+    // Keep the legacy entry shape compatible with the current TDDLab reader.
     const newReport = {
       numPassedTests: passedTests,
       failedTests: failedTests,
@@ -55,21 +67,33 @@ const extractAndAddObject = async (reportFile, tddLogFile) => {
       testId: testId
     };
 
-    const tddLog = readJSONFile(tddLogFile);
+    const tddLog = readJSONFile(resolvedTddLogFile);
     tddLog.push(newReport);
+    writeJSONFile(resolvedTddLogFile, tddLog);
 
-    writeJSONFile(tddLogFile, tddLog);
+    // New branch-aware capture. Failure here must not break the legacy TDD log.
+    try {
+      const result = appendBranchSyncExecution({
+        repoRoot,
+        scriptDirectory,
+        testEntry: newReport,
+      });
+
+      if (!result.written) {
+        console.warn(`Branch-aware TDD execution was not recorded: ${result.reason}`);
+      }
+    } catch (branchSyncError) {
+      console.warn('Could not record branch-aware TDD execution:', branchSyncError.message);
+    }
   } catch (error) {
-    console.error("Error en la ejecución:", error);
+    console.error('Error en la ejecución:', error);
   }
 };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const inputFilePath = path.join(__dirname, 'report.json');
-const outputFilePath = path.join(__dirname, 'tdd_log.json');
 
-extractAndAddObject(inputFilePath, outputFilePath);
+extractAndAddObject(inputFilePath);
 
 export { extractAndAddObject };
