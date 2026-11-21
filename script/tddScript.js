@@ -1,99 +1,78 @@
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 import path from 'path';
 import { spawn } from 'cross-spawn';
-import { getLastTestId } from './id_execution_tests_commit.js';
-import {
-  appendBranchSyncExecution,
-  getCurrentBranch,
-  getLegacyTddLogFilePath,
-} from './branchSyncExecution.js';
+import { syncTestExecution } from './branchSyncExecution.js';
 
 const COMMAND = 'jest';
-const args = ['--json', '--outputFile=./script/report.json'];
+const args = ['--json'];
 
-function runCommand(command, args) {
+function runJest(command, commandArgs) {
   return new Promise((resolve, reject) => {
-    const process = spawn(command, args, { stdio: 'inherit' });
-    process.on('close', () => {
-      resolve();
+    const child = spawn(command, commandArgs, {
+      stdio: ['inherit', 'pipe', 'inherit'],
+    });
+
+    let jsonOutput = '';
+
+    child.stdout.on('data', (chunk) => {
+      jsonOutput += chunk.toString();
+    });
+
+    child.on('error', reject);
+
+    child.on('close', (code) => {
+      try {
+        const report = JSON.parse(jsonOutput);
+        resolve({
+          code: code ?? 1,
+          report,
+        });
+      } catch (error) {
+        reject(
+          new Error(
+            `No se pudo interpretar la salida JSON de Jest: ${error.message}`,
+          ),
+        );
+      }
     });
   });
 }
 
-const readJSONFile = (filePath) => {
-  const rawData = fs.readFileSync(filePath, 'utf-8');
-  return JSON.parse(rawData);
-};
+const runTestsAndSync = async () => {
+  const __filename = fileURLToPath(import.meta.url);
+  const scriptDirectory = path.dirname(__filename);
+  const repoRoot = path.resolve(scriptDirectory, '..');
 
-const writeJSONFile = (filePath, data) => {
-  const jsonString = JSON.stringify(data, null, 2);
-  fs.writeFileSync(filePath, jsonString, 'utf-8');
-};
-
-const ensureFileExists = (filePath, initialData) => {
-  if (!fs.existsSync(filePath)) {
-    writeJSONFile(filePath, initialData);
-  }
-};
-
-const extractAndAddObject = async (reportFile, tddLogFile = null) => {
   try {
-    await runCommand(COMMAND, args);
+    const { code, report } = await runJest(COMMAND, args);
 
-    const __filename = fileURLToPath(import.meta.url);
-    const scriptDirectory = path.dirname(__filename);
-    const repoRoot = path.resolve(scriptDirectory, '..');
-    const branchName = getCurrentBranch(repoRoot);
-    const resolvedTddLogFile = tddLogFile ?? getLegacyTddLogFilePath(scriptDirectory, branchName);
-
-    ensureFileExists(resolvedTddLogFile, []);
-
-    const jsonData = readJSONFile(reportFile);
-    const passedTests = jsonData.numPassedTests;
-    const failedTests = jsonData.numFailedTests;
-    const totalTests = jsonData.numTotalTests;
-    const startTime = jsonData.startTime;
-    const success = jsonData.success;
-    const testId = getLastTestId(resolvedTddLogFile);
-
-    // Keep the legacy entry shape compatible with the current TDDLab reader.
-    const newReport = {
-      numPassedTests: passedTests,
-      failedTests: failedTests,
-      numTotalTests: totalTests,
-      timestamp: startTime,
-      success: success,
-      testId: testId
+    const testEntry = {
+      numPassedTests: report.numPassedTests,
+      failedTests: report.numFailedTests,
+      numTotalTests: report.numTotalTests,
+      timestamp: report.startTime ?? Date.now(),
+      success: report.success,
+      testId: null,
     };
 
-    const tddLog = readJSONFile(resolvedTddLogFile);
-    tddLog.push(newReport);
-    writeJSONFile(resolvedTddLogFile, tddLog);
+    const result = await syncTestExecution({
+      repoRoot,
+      testEntry,
+    });
 
-    // New branch-aware capture. Failure here must not break the legacy TDD log.
-    try {
-      const result = appendBranchSyncExecution({
-        repoRoot,
-        scriptDirectory,
-        testEntry: newReport,
-      });
+    console.log(
+      `TDD execution synced: ${result.execution.eventId} | ${result.branchName} | ${result.headSha.slice(0, 7)}`,
+    );
 
-      if (!result.written) {
-        console.warn(`Branch-aware TDD execution was not recorded: ${result.reason}`);
-      }
-    } catch (branchSyncError) {
-      console.warn('Could not record branch-aware TDD execution:', branchSyncError.message);
+    if (code !== 0) {
+      process.exitCode = code;
     }
   } catch (error) {
-    console.error('Error en la ejecución:', error);
+    console.error('Error en la ejecución o sincronización TDD:', error.message);
+    process.exitCode = 1;
   }
 };
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const inputFilePath = path.join(__dirname, 'report.json');
+runTestsAndSync();
 
-extractAndAddObject(inputFilePath);
-
-export { extractAndAddObject };
+export { runJest, runTestsAndSync };

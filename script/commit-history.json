@@ -76,12 +76,12 @@
     "conclusion": "success"
   },
   {
-    "sha": "HEAD",
+    "sha": "e9293abd6875440938e95f675be343b706676b7e",
     "author": "Juan Pablo Rivera Mercado",
     "commit": {
       "date": "2026-11-02T20:52:14.000Z",
       "message": "merge: integrar rama B",
-      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
+      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/e9293abd6875440938e95f675be343b706676b7e"
     },
     "stats": {
       "total": 7,
@@ -107,6 +107,25 @@
       "additions": 1,
       "deletions": 0,
       "date": "2026-11-02"
+    },
+    "coverage": 100,
+    "test_count": 5,
+    "failed_tests": 0,
+    "conclusion": "success"
+  },
+  {
+    "sha": "HEAD",
+    "author": "Juan Pablo",
+    "commit": {
+      "date": "2026-11-21T19:18:49.000Z",
+      "message": "feat(bl06): enviar ejecuciones TDD al backend",
+      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
+    },
+    "stats": {
+      "total": 464,
+      "additions": 273,
+      "deletions": 191,
+      "date": "2026-11-21"
     },
     "coverage": 100,
     "test_count": 5,

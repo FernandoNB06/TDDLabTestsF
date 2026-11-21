@@ -1,10 +1,11 @@
-import fs from 'fs';
-import path from 'path';
 import { execFileSync } from 'child_process';
 import { randomUUID } from 'crypto';
+import http from 'http';
+import https from 'https';
 
 const BRANCH_SYNC_SCHEMA_VERSION = 1;
 const BRANCH_SYNC_MODE = 'incremental';
+const DEFAULT_SYNC_URL = 'http://localhost:3000/api/TDDCycles/history/sync';
 
 const runGit = (repoRoot, args) => {
   try {
@@ -33,24 +34,29 @@ const parseGithubRemote = (remoteUrl) => {
   }
 
   const normalized = remoteUrl.trim().replace(/\.git$/, '');
+
   const sshMatch = normalized.match(/^git@github\.com:([^/]+)\/(.+)$/);
   if (sshMatch) {
     return { owner: sshMatch[1], name: sshMatch[2] };
   }
 
-  const sshUrlMatch = normalized.match(/^ssh:\/\/git@github\.com\/([^/]+)\/(.+)$/);
+  const sshUrlMatch = normalized.match(
+    /^ssh:\/\/git@github\.com\/([^/]+)\/(.+)$/,
+  );
   if (sshUrlMatch) {
     return { owner: sshUrlMatch[1], name: sshUrlMatch[2] };
   }
 
   try {
     const url = new URL(normalized);
+
     if (url.hostname !== 'github.com') {
       return null;
     }
 
     const [owner, ...repoParts] = url.pathname.replace(/^\//, '').split('/');
     const name = repoParts.join('/');
+
     if (!owner || !name) {
       return null;
     }
@@ -62,116 +68,21 @@ const parseGithubRemote = (remoteUrl) => {
 };
 
 const getGithubRepository = (repoRoot) => {
-  const remoteUrl = runGit(repoRoot, ['config', '--get', 'remote.origin.url']);
+  const remoteUrl = runGit(repoRoot, [
+    'config',
+    '--get',
+    'remote.origin.url',
+  ]);
+
   return parseGithubRemote(remoteUrl);
 };
 
-const getSafeBranchName = (branchName) => encodeURIComponent(branchName);
-
-const getBranchSyncFilePath = (scriptDirectory, branchName) => {
-  return path.join(scriptDirectory, 'branch-sync', `${getSafeBranchName(branchName)}.json`);
-};
-
-/**
- * Preserve the exact legacy filename on main so current TDDLab keeps working.
- * Other branches get isolated legacy logs, avoiding test executions from
- * parallel branches writing to the same tdd_log.json.
- */
-const getLegacyTddLogFilePath = (scriptDirectory, branchName) => {
-  if (!branchName || branchName === 'main') {
-    return path.join(scriptDirectory, 'tdd_log.json');
-  }
-
-  return path.join(scriptDirectory, `tdd_log.${getSafeBranchName(branchName)}.json`);
-};
-
-const createBranchSyncData = ({ repository, branchName, headSha }) => ({
-  schemaVersion: BRANCH_SYNC_SCHEMA_VERSION,
-  mode: BRANCH_SYNC_MODE,
-  repository: {
-    provider: 'github',
-    owner: repository.owner,
-    name: repository.name,
-  },
-  branch: {
-    name: branchName,
-    headSha,
-    // Scripts work offline and do not know the backend HEAD version.
-    expectedHeadVersion: null,
-  },
-  commits: [],
-  branchCommitShas: [],
-  executions: [],
-});
-
-const readBranchSyncData = (filePath, initialData) => {
-  if (!fs.existsSync(filePath)) {
-    return initialData;
-  }
-
-  const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  if (data.schemaVersion !== BRANCH_SYNC_SCHEMA_VERSION || data.mode !== BRANCH_SYNC_MODE) {
-    throw new Error(`Unsupported branch sync format in ${filePath}`);
-  }
-
-  if (!Array.isArray(data.commits) || !Array.isArray(data.branchCommitShas) || !Array.isArray(data.executions)) {
-    throw new Error(`Invalid branch sync structure in ${filePath}`);
-  }
-
-  return data;
-};
-
-const writeJsonAtomically = (filePath, data) => {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.tmp`;
-  fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tempPath, filePath);
-};
-
-/**
- * Captures a test execution in the BranchSyncData v1 shape agreed with Backend.
- *
- * The legacy tdd_log.json remains untouched by this helper. A separate file is
- * maintained per Git branch so parallel branches do not write to the same new
- * synchronization file.
- */
-const appendBranchSyncExecution = ({ repoRoot, scriptDirectory, testEntry }) => {
-  const branchName = getCurrentBranch(repoRoot);
-  if (!branchName) {
-    return {
-      written: false,
-      reason: 'detached-head-or-branch-unavailable',
-    };
-  }
-
-  const repository = getGithubRepository(repoRoot);
-  if (!repository) {
-    return {
-      written: false,
-      reason: 'github-origin-unavailable',
-    };
-  }
-
-  const headSha = getHeadSha(repoRoot);
-  const filePath = getBranchSyncFilePath(scriptDirectory, branchName);
-  const initialData = createBranchSyncData({ repository, branchName, headSha });
-  const data = readBranchSyncData(filePath, initialData);
-
-  if (
-    data.repository?.provider !== 'github' ||
-    data.repository?.owner !== repository.owner ||
-    data.repository?.name !== repository.name
-  ) {
-    throw new Error(`Branch sync repository mismatch in ${filePath}`);
-  }
-
-  // Refresh only the information that Scripts can know locally.
-  data.branch = {
-    name: branchName,
-    headSha,
-    expectedHeadVersion: null,
-  };
-
+const createBranchSyncPayload = ({
+  repository,
+  branchName,
+  headSha,
+  testEntry,
+}) => {
   const execution = {
     eventId: randomUUID(),
     branchAtCapture: branchName,
@@ -183,27 +94,149 @@ const appendBranchSyncExecution = ({ repoRoot, scriptDirectory, testEntry }) => 
     numTotalTests: testEntry.numTotalTests,
     coveragePercentage: null,
     success: testEntry.success,
-    // Kept only for compatibility. BranchSyncData explicitly states that
-    // testId is not a globally unique identity.
-    testId: testEntry.testId ?? null,
+    testId: null,
   };
 
-  data.executions.push(execution);
-  writeJsonAtomically(filePath, data);
-
   return {
-    written: true,
-    filePath,
+    payload: {
+      schemaVersion: BRANCH_SYNC_SCHEMA_VERSION,
+      mode: BRANCH_SYNC_MODE,
+      repository: {
+        provider: 'github',
+        owner: repository.owner,
+        name: repository.name,
+      },
+      branch: {
+        name: branchName,
+        headSha,
+        expectedHeadVersion: null,
+      },
+      commits: [],
+      branchCommitShas: [],
+      executions: [execution],
+    },
     execution,
   };
 };
 
+const postJson = (urlString, payload, timeoutMs = 8000) =>
+  new Promise((resolve, reject) => {
+    const url = new URL(urlString);
+
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      reject(new Error(`Protocolo no soportado en TDD_SYNC_URL: ${url.protocol}`));
+      return;
+    }
+
+    const body = JSON.stringify(payload);
+    const client = url.protocol === 'https:' ? https : http;
+
+    const request = client.request(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+        },
+      },
+      (response) => {
+        let responseBody = '';
+
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+
+        response.on('end', () => {
+          const statusCode = response.statusCode ?? 0;
+
+          if (statusCode < 200 || statusCode >= 300) {
+            reject(
+              new Error(
+                `Backend TDD respondió ${statusCode}: ${responseBody || 'sin cuerpo'}`,
+              ),
+            );
+            return;
+          }
+
+          if (!responseBody) {
+            resolve(null);
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(responseBody));
+          } catch {
+            resolve(responseBody);
+          }
+        });
+      },
+    );
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(
+        new Error(`Timeout al sincronizar TDD después de ${timeoutMs} ms`),
+      );
+    });
+
+    request.on('error', reject);
+    request.write(body);
+    request.end();
+  });
+
+const syncTestExecution = async ({
+  repoRoot,
+  testEntry,
+  syncUrl = process.env.TDD_SYNC_URL || DEFAULT_SYNC_URL,
+}) => {
+  const branchName = getCurrentBranch(repoRoot);
+
+  if (!branchName) {
+    throw new Error(
+      'No se pudo determinar la rama actual. Detached HEAD no es válido para esta captura.',
+    );
+  }
+
+  const repository = getGithubRepository(repoRoot);
+
+  if (!repository) {
+    throw new Error(
+      'No se pudo determinar owner/repository desde remote.origin.url.',
+    );
+  }
+
+  const headSha = getHeadSha(repoRoot);
+
+  if (!headSha) {
+    throw new Error('No se pudo obtener el SHA actual de Git.');
+  }
+
+  const { payload, execution } = createBranchSyncPayload({
+    repository,
+    branchName,
+    headSha,
+    testEntry,
+  });
+
+  const response = await postJson(syncUrl, payload);
+
+  return {
+    response,
+    payload,
+    execution,
+    branchName,
+    headSha,
+    syncUrl,
+  };
+};
+
 export {
-  appendBranchSyncExecution,
-  getBranchSyncFilePath,
+  createBranchSyncPayload,
   getCurrentBranch,
   getGithubRepository,
   getHeadSha,
-  getLegacyTddLogFilePath,
   parseGithubRemote,
+  postJson,
+  syncTestExecution,
 };

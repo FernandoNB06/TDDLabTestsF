@@ -64,7 +64,7 @@
     "testId": 2
   },
   {
-    "commitId": "HEAD",
+    "commitId": "e9293abd6875440938e95f675be343b706676b7e",
     "commitName": "merge: integrar rama B",
     "commitTimestamp": 1793652735662,
     "testId": 3
@@ -82,5 +82,11 @@
     "commitName": "test: commit posterior al merge",
     "commitTimestamp": 1793653329132,
     "testId": 4
+  },
+  {
+    "commitId": "HEAD",
+    "commitName": "feat(bl06): enviar ejecuciones TDD al backend",
+    "commitTimestamp": 1795288730096,
+    "testId": 5
   }
 ]
