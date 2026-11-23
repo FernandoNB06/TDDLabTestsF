@@ -5,7 +5,9 @@ import https from 'https';
 
 const BRANCH_SYNC_SCHEMA_VERSION = 1;
 const BRANCH_SYNC_MODE = 'incremental';
-const DEFAULT_SYNC_URL = 'http://localhost:3000/api/TDDCycles/history/sync';
+const DEFAULT_SYNC_URL = 'http://localhost:3000/api/TDDCycles/sync';
+const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_ATTEMPTS = 3;
 
 const runGit = (repoRoot, args) => {
   try {
@@ -29,9 +31,7 @@ const getHeadSha = (repoRoot) => {
 };
 
 const parseGithubRemote = (remoteUrl) => {
-  if (!remoteUrl) {
-    return null;
-  }
+  if (!remoteUrl) return null;
 
   const normalized = remoteUrl.trim().replace(/\.git$/, '');
 
@@ -49,18 +49,12 @@ const parseGithubRemote = (remoteUrl) => {
 
   try {
     const url = new URL(normalized);
-
-    if (url.hostname !== 'github.com') {
-      return null;
-    }
+    if (url.hostname !== 'github.com') return null;
 
     const [owner, ...repoParts] = url.pathname.replace(/^\//, '').split('/');
     const name = repoParts.join('/');
 
-    if (!owner || !name) {
-      return null;
-    }
-
+    if (!owner || !name) return null;
     return { owner, name };
   } catch {
     return null;
@@ -73,7 +67,6 @@ const getGithubRepository = (repoRoot) => {
     '--get',
     'remote.origin.url',
   ]);
-
   return parseGithubRemote(remoteUrl);
 };
 
@@ -119,7 +112,7 @@ const createBranchSyncPayload = ({
   };
 };
 
-const postJson = (urlString, payload, timeoutMs = 8000) =>
+const postJson = (urlString, token, payload, timeoutMs = DEFAULT_TIMEOUT_MS) =>
   new Promise((resolve, reject) => {
     const url = new URL(urlString);
 
@@ -136,6 +129,7 @@ const postJson = (urlString, payload, timeoutMs = 8000) =>
       {
         method: 'POST',
         headers: {
+          authorization: `Bearer ${token}`,
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(body),
         },
@@ -150,34 +144,41 @@ const postJson = (urlString, payload, timeoutMs = 8000) =>
 
         response.on('end', () => {
           const statusCode = response.statusCode ?? 0;
+          let parsedBody = responseBody;
+
+          if (responseBody) {
+            try {
+              parsedBody = JSON.parse(responseBody);
+            } catch {
+              // Keep plain text when an intermediary responds.
+            }
+          }
 
           if (statusCode < 200 || statusCode >= 300) {
-            reject(
-              new Error(
-                `Backend TDD respondió ${statusCode}: ${responseBody || 'sin cuerpo'}`,
-              ),
+            const error = new Error(
+              `Backend TDD respondió ${statusCode}: ${
+                typeof parsedBody === 'object'
+                  ? parsedBody.code ?? parsedBody.message ?? responseBody
+                  : parsedBody || 'sin cuerpo'
+              }`,
             );
+            error.status = statusCode;
+            error.response = parsedBody;
+            reject(error);
             return;
           }
 
-          if (!responseBody) {
-            resolve(null);
-            return;
-          }
-
-          try {
-            resolve(JSON.parse(responseBody));
-          } catch {
-            resolve(responseBody);
-          }
+          resolve(parsedBody || null);
         });
       },
     );
 
     request.setTimeout(timeoutMs, () => {
-      request.destroy(
-        new Error(`Timeout al sincronizar TDD después de ${timeoutMs} ms`),
+      const error = new Error(
+        `Timeout al sincronizar TDD después de ${timeoutMs} ms`,
       );
+      error.code = 'SYNC_TIMEOUT';
+      request.destroy(error);
     });
 
     request.on('error', reject);
@@ -185,13 +186,49 @@ const postJson = (urlString, payload, timeoutMs = 8000) =>
     request.end();
   });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const shouldRetry = (error) => {
+  if (!error?.status) return true;
+  return [500, 502, 503, 504].includes(error.status);
+};
+
+const sendWithRetry = async ({
+  syncUrl,
+  token,
+  payload,
+  maxAttempts = DEFAULT_MAX_ATTEMPTS,
+}) => {
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await postJson(syncUrl, token, payload);
+    } catch (error) {
+      lastError = error;
+
+      if (!shouldRetry(error) || attempt === maxAttempts) {
+        throw error;
+      }
+
+      await sleep(500 * attempt);
+    }
+  }
+
+  throw lastError;
+};
+
 const syncTestExecution = async ({
   repoRoot,
   testEntry,
   syncUrl = process.env.TDD_SYNC_URL || DEFAULT_SYNC_URL,
+  token = process.env.TDD_SYNC_TOKEN,
 }) => {
-  const branchName = getCurrentBranch(repoRoot);
+  if (!token) {
+    throw new Error('Configurar TDD_SYNC_TOKEN antes de ejecutar npm test.');
+  }
 
+  const branchName = getCurrentBranch(repoRoot);
   if (!branchName) {
     throw new Error(
       'No se pudo determinar la rama actual. Detached HEAD no es válido para esta captura.',
@@ -199,7 +236,6 @@ const syncTestExecution = async ({
   }
 
   const repository = getGithubRepository(repoRoot);
-
   if (!repository) {
     throw new Error(
       'No se pudo determinar owner/repository desde remote.origin.url.',
@@ -207,7 +243,6 @@ const syncTestExecution = async ({
   }
 
   const headSha = getHeadSha(repoRoot);
-
   if (!headSha) {
     throw new Error('No se pudo obtener el SHA actual de Git.');
   }
@@ -219,7 +254,11 @@ const syncTestExecution = async ({
     testEntry,
   });
 
-  const response = await postJson(syncUrl, payload);
+  const response = await sendWithRetry({
+    syncUrl,
+    token,
+    payload,
+  });
 
   return {
     response,
@@ -238,5 +277,6 @@ export {
   getHeadSha,
   parseGithubRemote,
   postJson,
+  sendWithRetry,
   syncTestExecution,
 };

@@ -22,10 +22,9 @@ function runJest(command, commandArgs) {
 
     child.on('close', (code) => {
       try {
-        const report = JSON.parse(jsonOutput);
         resolve({
           code: code ?? 1,
-          report,
+          report: JSON.parse(jsonOutput),
         });
       } catch (error) {
         reject(
@@ -63,6 +62,12 @@ const runTestsAndSync = async () => {
     console.log(
       `TDD execution synced: ${result.execution.eventId} | ${result.branchName} | ${result.headSha.slice(0, 7)}`,
     );
+
+    if (result.response?.summary) {
+      console.log(
+        `Backend: executionsAdded=${result.response.summary.executionsAdded}, executionsUpdated=${result.response.summary.executionsUpdated}`,
+      );
+    }
 
     if (code !== 0) {
       process.exitCode = code;

@@ -95,12 +95,12 @@
     "conclusion": "success"
   },
   {
-    "sha": "HEAD",
+    "sha": "7a39f5fe78da9d5bc45035f7d0aa87b5b9ea2281",
     "author": "Juan Pablo Rivera Mercado",
     "commit": {
       "date": "2026-11-02T21:02:07.000Z",
       "message": "test: commit posterior al merge",
-      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
+      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/7a39f5fe78da9d5bc45035f7d0aa87b5b9ea2281"
     },
     "stats": {
       "total": 1,
@@ -126,6 +126,25 @@
       "additions": 273,
       "deletions": 191,
       "date": "2026-11-21"
+    },
+    "coverage": 100,
+    "test_count": 5,
+    "failed_tests": 0,
+    "conclusion": "success"
+  },
+  {
+    "sha": "HEAD",
+    "author": "Juan Pablo",
+    "commit": {
+      "date": "2026-11-23T22:14:33.000Z",
+      "message": "feat(bl06): integrar sincronizacion autenticada con backend",
+      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
+    },
+    "stats": {
+      "total": 169,
+      "additions": 117,
+      "deletions": 52,
+      "date": "2026-11-23"
     },
     "coverage": 100,
     "test_count": 5,

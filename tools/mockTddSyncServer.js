@@ -1,16 +1,25 @@
 import http from 'http';
 
 const port = Number(process.env.MOCK_TDD_PORT || 4100);
+const token = process.env.MOCK_TDD_TOKEN || 'a'.repeat(64);
 
 const server = http.createServer((req, res) => {
-  if (req.method !== 'POST' || req.url !== '/api/TDDCycles/history/sync') {
+  if (req.method !== 'POST' || req.url !== '/api/TDDCycles/sync') {
     res.writeHead(404, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ error: 'not found' }));
+    res.end(JSON.stringify({ code: 'NOT_FOUND' }));
+    return;
+  }
+
+  if (req.headers.authorization !== `Bearer ${token}`) {
+    res.writeHead(401, {
+      'content-type': 'application/json',
+      'www-authenticate': 'Bearer',
+    });
+    res.end(JSON.stringify({ code: 'UNAUTHORIZED' }));
     return;
   }
 
   let raw = '';
-
   req.setEncoding('utf8');
   req.on('data', (chunk) => {
     raw += chunk;
@@ -40,7 +49,7 @@ const server = http.createServer((req, res) => {
 
       if (!valid) {
         res.writeHead(400, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'payload inválido' }));
+        res.end(JSON.stringify({ code: 'INVALID_SYNC_BATCH' }));
         return;
       }
 
@@ -48,23 +57,34 @@ const server = http.createServer((req, res) => {
       console.log(JSON.stringify(body, null, 2));
       console.log('--- fin ---\n');
 
-      res.writeHead(201, { 'content-type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          ok: true,
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        schemaVersion: 1,
+        mode: 'incremental',
+        repository: body.repository,
+        branch: body.branch.name,
+        summary: {
+          repositoryCreated: false,
+          branchesAdded: 0,
+          commitsAdded: 0,
+          commitsUpdated: 0,
+          relationsAdded: 0,
           executionsAdded: 1,
-          eventId: execution.eventId,
-        }),
-      );
-    } catch (error) {
+          executionsUpdated: 0,
+        },
+        headUpdate: {
+          status: 'not_applied',
+          reason: 'HEAD_UPDATES_NOT_SUPPORTED',
+        },
+      }));
+    } catch {
       res.writeHead(400, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: error.message }));
+      res.end(JSON.stringify({ code: 'INVALID_JSON' }));
     }
   });
 });
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(
-    `Mock TDD sync escuchando en http://127.0.0.1:${port}/api/TDDCycles/history/sync`,
-  );
+  console.log(`Mock TDD sync: http://127.0.0.1:${port}/api/TDDCycles/sync`);
+  console.log(`Mock token: ${token}`);
 });

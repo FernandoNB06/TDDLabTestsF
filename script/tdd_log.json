@@ -78,7 +78,7 @@
     "testId": 4
   },
   {
-    "commitId": "HEAD",
+    "commitId": "7a39f5fe78da9d5bc45035f7d0aa87b5b9ea2281",
     "commitName": "test: commit posterior al merge",
     "commitTimestamp": 1793653329132,
     "testId": 4
@@ -88,5 +88,11 @@
     "commitName": "feat(bl06): enviar ejecuciones TDD al backend",
     "commitTimestamp": 1795288730096,
     "testId": 5
+  },
+  {
+    "commitId": "HEAD",
+    "commitName": "feat(bl06): integrar sincronizacion autenticada con backend",
+    "commitTimestamp": 1795472075291,
+    "testId": 6
   }
 ]
