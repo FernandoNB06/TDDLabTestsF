@@ -1,18 +1,7 @@
-set -e
-
+#!/bin/sh
 if [ "$HUSKY" = "0" ] || [ "$HUSKY_SKIP_TRACK" = "1" ]; then
-	exit 0
+  exit 0
 fi
 
-node ./script/commitScript.js
-
 REPO_DIR="$(git rev-parse --show-toplevel)"
-node "$REPO_DIR/script/commit-tracker.js"
-
-node "$REPO_DIR/script/stageLegacyLogs.js"
-
-export HUSKY=0
-git commit --amend --no-edit 
-unset HUSKY
-
 node "$REPO_DIR/script/branchSyncCommit.js"

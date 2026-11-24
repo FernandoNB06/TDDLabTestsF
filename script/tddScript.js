@@ -1,9 +1,7 @@
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import path from 'path';
-import fs from 'node:fs';
-import { getLastTestId } from './id_execution_tests_commit.js';
 import { spawn } from 'cross-spawn';
-import { syncTestExecution, getLegacyTddLogFilePath, recordExecution } from './branchSyncExecution.js';
+import { syncTestExecution } from './branchSyncExecution.js';
 
 const COMMAND = 'jest';
 const args = ['--json'];
@@ -44,22 +42,8 @@ const runTestsAndSync = async () => {
     testId: null,
   };
 
-  let execution;
   try {
-    const logPath = getLegacyTddLogFilePath(undefined, repoRoot);
-    testEntry.testId = getLastTestId(logPath);
-    const log = JSON.parse(fs.readFileSync(logPath, 'utf8'));
-    log.push(testEntry);
-    fs.writeFileSync(logPath, JSON.stringify(log, null, 2));
-    execution = recordExecution(testEntry, repoRoot);
-  } catch (error) {
-    console.error(`Error al registrar la ejecucion local: ${error.message}`);
-    process.exitCode = code || 1;
-    return;
-  }
-
-  try {
-    const result = await syncTestExecution({ repoRoot, testEntry, execution });
+    const result = await syncTestExecution({ repoRoot, testEntry });
     console.log(`TDDLab synced: ${result.execution.eventId} | ${result.branchName} | ${result.headSha.slice(0, 7)}`);
   } catch (error) {
     console.warn(`TDDLab sync warning: ${error.message}`);
@@ -69,5 +53,7 @@ const runTestsAndSync = async () => {
   process.exitCode = code;
 };
 
-runTestsAndSync();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await runTestsAndSync();
+}
 export { runJest, runTestsAndSync };

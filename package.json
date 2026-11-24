@@ -15,7 +15,8 @@
     "postinstall": "git init && npx husky",
     "semantic-commits-on": "node semantic-commits.js enable",
     "semantic-commits-off": "node semantic-commits.js disabled",
-    "tdd:setup": "node ./script/tddSetup.js"
+    "tdd:setup": "node ./script/tddSetup.js",
+    "tdd:sync-commit": "node ./script/branchSyncCommit.js"
   },
   "author": "Israel Antezana R.",
   "license": "ISC",
