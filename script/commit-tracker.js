@@ -3,8 +3,17 @@ import { execSync, exec } from "child_process";
 import { tmpdir } from "os";
 import path from "path";
 import crypto from "crypto";
+import {
+  getCurrentBranch,
+  getLegacyCommitHistoryFilePath,
+} from "./branchSyncExecution.js";
 
-const DATA_FILE = "script/commit-history.json";
+const BRANCH = getCurrentBranch();
+const DATA_FILE = getLegacyCommitHistoryFilePath(BRANCH);
+const GIT_DATA_FILE = path
+  .relative(process.cwd(), DATA_FILE)
+  .split(path.sep)
+  .join("/");
 const HEAD_MARKER = "HEAD";
 
 function getCommitInfo(sha) {
@@ -64,9 +73,9 @@ function getCommitInfo(sha) {
     }
 
     try {
-      // Excluir commit-history.json al obtener las estadísticas del diff
+      // Excluir el historial de esta rama de las estadísticas del diff.
       const diffStats = execSync(
-        `git diff --stat ${parentRef} ${gitSha} -- ":!${DATA_FILE}"`
+        `git diff --stat ${parentRef} ${gitSha} -- ":!${GIT_DATA_FILE}"`
       ).toString();
       const additionsMatch = diffStats.match(/(\d+) insertion/);
       const deletionsMatch = diffStats.match(/(\d+) deletion/);
@@ -81,7 +90,7 @@ function getCommitInfo(sha) {
       // Si es el primer commit, no hay parent para comparar
       try {
         const diffStats = execSync(
-          `git show --stat ${gitSha} -- ":!${DATA_FILE}"`
+          `git show --stat ${gitSha} -- ":!${GIT_DATA_FILE}"`
         ).toString();
         const additionsMatch = diffStats.match(/(\d+) insertion/);
         additions = additionsMatch ? parseInt(additionsMatch[1]) : 0;

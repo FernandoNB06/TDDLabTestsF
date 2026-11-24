@@ -3,15 +3,17 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'cross-spawn';
 import { getLastTestId } from './id_execution_tests_commit.js';
+import { getLegacyTddLogFilePath, recordExecution } from './branchSyncExecution.js';
 
 const COMMAND = 'jest';
 const args = ['--json', '--outputFile=./script/report.json'];
 
 function runCommand(command, args) {
   return new Promise((resolve, reject) => {
-    const process = spawn(command, args, { stdio: 'inherit' });
-    process.on('close', (code) => {
-      resolve();
+    const child = spawn(command, args, { stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve(code);
     });
   });
 }
@@ -34,7 +36,7 @@ const ensureFileExists = (filePath, initialData) => {
 
 const extractAndAddObject = async (reportFile, tddLogFile) => {
   try {
-    await runCommand(COMMAND, args);
+    const exitCode = await runCommand(COMMAND, args);
 
     ensureFileExists(tddLogFile, []);
 
@@ -59,8 +61,22 @@ const extractAndAddObject = async (reportFile, tddLogFile) => {
     tddLog.push(newReport);
 
     writeJSONFile(tddLogFile, tddLog);
+    recordExecution({
+      numPassedTests: passedTests,
+      failedTests,
+      numTotalTests: totalTests,
+      timestamp: startTime,
+      success,
+      testId,
+      coveragePercentage: null,
+    });
+
+    if (exitCode !== 0) {
+      process.exitCode = exitCode ?? 1;
+    }
   } catch (error) {
     console.error("Error en la ejecución:", error);
+    process.exitCode = 1;
   }
 };
 
@@ -68,7 +84,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const inputFilePath = path.join(__dirname, 'report.json');
-const outputFilePath = path.join(__dirname, 'tdd_log.json');
+const outputFilePath = getLegacyTddLogFilePath();
 
 extractAndAddObject(inputFilePath, outputFilePath);
 
