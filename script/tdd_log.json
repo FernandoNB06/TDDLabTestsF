@@ -1,0 +1,86 @@
+[
+  {
+    "numPassedTests": 1,
+    "failedTests": 0,
+    "numTotalTests": 1,
+    "timestamp": 1793649676989,
+    "success": true,
+    "testId": 0
+  },
+  {
+    "commitId": "7da864ccc5e09df96f98bb06e3864ddfa953fa21",
+    "commitName": "test: prueba inicial",
+    "commitTimestamp": 1793649906666,
+    "testId": 0
+  },
+  {
+    "numPassedTests": 1,
+    "failedTests": 0,
+    "numTotalTests": 1,
+    "timestamp": 1793650170698,
+    "success": true,
+    "testId": 1
+  },
+  {
+    "numPassedTests": 2,
+    "failedTests": 0,
+    "numTotalTests": 2,
+    "timestamp": 1793650238832,
+    "success": true,
+    "testId": 1
+  },
+  {
+    "commitId": "e7654e537befbae5bc935ebeb1a6cc230d6603a9",
+    "commitName": "test: segunda prueba",
+    "commitTimestamp": 1793650269000,
+    "testId": 1
+  },
+  {
+    "numPassedTests": 3,
+    "failedTests": 0,
+    "numTotalTests": 3,
+    "timestamp": 1793650941989,
+    "success": true,
+    "testId": 2
+  },
+  {
+    "commitId": "65daf5f23637db00c261e57ad5a0487c07792c01",
+    "commitName": "test: prueba en rama A",
+    "commitTimestamp": 1793650973357,
+    "testId": 2
+  },
+  {
+    "numPassedTests": 4,
+    "failedTests": 0,
+    "numTotalTests": 4,
+    "timestamp": 1793651181798,
+    "success": true,
+    "testId": 2
+  },
+  {
+    "commitId": "7e283495c024752c91022f12db9a3d16f2380299",
+    "commitName": "test: prueba en rama B",
+    "commitTimestamp": 1793651206476,
+    "testId": 2
+  },
+  {
+    "commitId": "HEAD",
+    "commitName": "merge: integrar rama B",
+    "commitTimestamp": 1793652735662,
+    "testId": 3
+  },
+  {
+    "numPassedTests": 5,
+    "failedTests": 0,
+    "numTotalTests": 5,
+    "timestamp": 1793653272629,
+    "success": true,
+    "testId": 4
+  },
+  {
+    "commitId": "HEAD",
+    "commitName": "test: commit posterior al merge",
+    "commitTimestamp": 1793653329132,
+    "testId": 4
+  }
+]

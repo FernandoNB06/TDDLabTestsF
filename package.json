@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "postinstall": "git init && npx husky",
     "semantic-commits-on": "node semantic-commits.js enable",
-    "semantic-commits-off": "node semantic-commits.js disabled"
+    "semantic-commits-off": "node semantic-commits.js disabled",
+    "tdd:setup": "node ./script/tddSetup.js"
   },
   "author": "Israel Antezana R.",
   "license": "ISC",
@@ -31,5 +32,11 @@
   },
   "dependencies": {
     "parcel-jest-base": "file:"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "<rootDir>/node_modules/",
+      "<rootDir>/script/branchSync.test.js"
+    ]
   }
 }

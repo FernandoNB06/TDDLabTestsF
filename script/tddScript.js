@@ -1,91 +1,73 @@
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 import path from 'path';
-import { spawn } from 'cross-spawn';
+import fs from 'node:fs';
 import { getLastTestId } from './id_execution_tests_commit.js';
-import { getLegacyTddLogFilePath, recordExecution } from './branchSyncExecution.js';
+import { spawn } from 'cross-spawn';
+import { syncTestExecution, getLegacyTddLogFilePath, recordExecution } from './branchSyncExecution.js';
 
 const COMMAND = 'jest';
-const args = ['--json', '--outputFile=./script/report.json'];
+const args = ['--json'];
 
-function runCommand(command, args) {
+function runJest(command, commandArgs) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: 'inherit' });
+    const child = spawn(command, commandArgs, { stdio: ['inherit', 'pipe', 'inherit'] });
+    let jsonOutput = '';
+    child.stdout.on('data', (chunk) => { jsonOutput += chunk.toString(); });
     child.on('error', reject);
     child.on('close', (code) => {
-      resolve(code);
+      try { resolve({ code: code ?? 1, report: JSON.parse(jsonOutput) }); }
+      catch (error) { reject(new Error(`No se pudo interpretar la salida JSON de Jest: ${error.message}`)); }
     });
   });
 }
 
-const readJSONFile = (filePath) => {
-  const rawData = fs.readFileSync(filePath, 'utf-8');
-  return JSON.parse(rawData);
-};
+const runTestsAndSync = async () => {
+  const __filename = fileURLToPath(import.meta.url);
+  const repoRoot = path.resolve(path.dirname(__filename), '..');
 
-const writeJSONFile = (filePath, data) => {
-  const jsonString = JSON.stringify(data, null, 2);
-  fs.writeFileSync(filePath, jsonString, 'utf-8');
-};
-
-const ensureFileExists = (filePath, initialData) => {
-  if (!fs.existsSync(filePath)) {
-    writeJSONFile(filePath, initialData);
-  }
-};
-
-const extractAndAddObject = async (reportFile, tddLogFile) => {
+  let code;
+  let report;
   try {
-    const exitCode = await runCommand(COMMAND, args);
-
-    ensureFileExists(tddLogFile, []);
-
-    const jsonData = readJSONFile(reportFile);
-    const passedTests = jsonData.numPassedTests;
-    const failedTests = jsonData.numFailedTests; 
-    const totalTests = jsonData.numTotalTests;
-    const startTime = jsonData.startTime;
-    const success = jsonData.success;
-    let testId = getLastTestId(tddLogFile);
-
-    const newReport = {
-      numPassedTests: passedTests,
-      failedTests: failedTests,
-      numTotalTests: totalTests,
-      timestamp: startTime,
-      success: success,
-      testId: testId
-    };
-
-    const tddLog = readJSONFile(tddLogFile);
-    tddLog.push(newReport);
-
-    writeJSONFile(tddLogFile, tddLog);
-    recordExecution({
-      numPassedTests: passedTests,
-      failedTests,
-      numTotalTests: totalTests,
-      timestamp: startTime,
-      success,
-      testId,
-      coveragePercentage: null,
-    });
-
-    if (exitCode !== 0) {
-      process.exitCode = exitCode ?? 1;
-    }
+    ({ code, report } = await runJest(COMMAND, args));
   } catch (error) {
-    console.error("Error en la ejecución:", error);
+    console.error('Error al ejecutar Jest:', error.message);
     process.exitCode = 1;
+    return;
   }
+
+  const testEntry = {
+    numPassedTests: report.numPassedTests,
+    failedTests: report.numFailedTests,
+    numTotalTests: report.numTotalTests,
+    timestamp: report.startTime ?? Date.now(),
+    success: report.success,
+    testId: null,
+  };
+
+  let execution;
+  try {
+    const logPath = getLegacyTddLogFilePath(undefined, repoRoot);
+    testEntry.testId = getLastTestId(logPath);
+    const log = JSON.parse(fs.readFileSync(logPath, 'utf8'));
+    log.push(testEntry);
+    fs.writeFileSync(logPath, JSON.stringify(log, null, 2));
+    execution = recordExecution(testEntry, repoRoot);
+  } catch (error) {
+    console.error(`Error al registrar la ejecucion local: ${error.message}`);
+    process.exitCode = code || 1;
+    return;
+  }
+
+  try {
+    const result = await syncTestExecution({ repoRoot, testEntry, execution });
+    console.log(`TDDLab synced: ${result.execution.eventId} | ${result.branchName} | ${result.headSha.slice(0, 7)}`);
+  } catch (error) {
+    console.warn(`TDDLab sync warning: ${error.message}`);
+    console.warn('Las pruebas conservarán su resultado aunque la sincronización falle.');
+  }
+
+  process.exitCode = code;
 };
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const inputFilePath = path.join(__dirname, 'report.json');
-const outputFilePath = getLegacyTddLogFilePath();
-
-extractAndAddObject(inputFilePath, outputFilePath);
-
-export { extractAndAddObject };
+runTestsAndSync();
+export { runJest, runTestsAndSync };
