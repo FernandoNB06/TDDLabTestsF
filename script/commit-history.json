@@ -76,12 +76,12 @@
     "conclusion": "success"
   },
   {
-    "sha": "e9293abd6875440938e95f675be343b706676b7e",
+    "sha": "HEAD",
     "author": "Juan Pablo Rivera Mercado",
     "commit": {
       "date": "2026-11-02T20:52:14.000Z",
       "message": "merge: integrar rama B",
-      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/e9293abd6875440938e95f675be343b706676b7e"
+      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
     },
     "stats": {
       "total": 7,
@@ -95,56 +95,18 @@
     "conclusion": "success"
   },
   {
-    "sha": "7a39f5fe78da9d5bc45035f7d0aa87b5b9ea2281",
+    "sha": "HEAD",
     "author": "Juan Pablo Rivera Mercado",
     "commit": {
       "date": "2026-11-02T21:02:07.000Z",
       "message": "test: commit posterior al merge",
-      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/7a39f5fe78da9d5bc45035f7d0aa87b5b9ea2281"
+      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
     },
     "stats": {
       "total": 1,
       "additions": 1,
       "deletions": 0,
       "date": "2026-11-02"
-    },
-    "coverage": 100,
-    "test_count": 5,
-    "failed_tests": 0,
-    "conclusion": "success"
-  },
-  {
-    "sha": "HEAD",
-    "author": "Juan Pablo",
-    "commit": {
-      "date": "2026-11-21T19:18:49.000Z",
-      "message": "feat(bl06): enviar ejecuciones TDD al backend",
-      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
-    },
-    "stats": {
-      "total": 464,
-      "additions": 273,
-      "deletions": 191,
-      "date": "2026-11-21"
-    },
-    "coverage": 100,
-    "test_count": 5,
-    "failed_tests": 0,
-    "conclusion": "success"
-  },
-  {
-    "sha": "HEAD",
-    "author": "Juan Pablo",
-    "commit": {
-      "date": "2026-11-23T22:14:33.000Z",
-      "message": "feat(bl06): integrar sincronizacion autenticada con backend",
-      "url": "https://github.com/Jpriveram/TDDLabScriptTests/commit/HEAD"
-    },
-    "stats": {
-      "total": 169,
-      "additions": 117,
-      "deletions": 52,
-      "date": "2026-11-23"
     },
     "coverage": 100,
     "test_count": 5,
