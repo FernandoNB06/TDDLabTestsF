@@ -1,3 +1,4 @@
+.husky/** text eol=lf
 # Desactivar el diff de estos logs
 script/commit-history.json -diff
 script/tdd_log.json -diff

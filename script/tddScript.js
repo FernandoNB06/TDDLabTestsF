@@ -1,4 +1,4 @@
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import path from 'path';
 import { spawn } from 'cross-spawn';
 import { syncTestExecution } from './branchSyncExecution.js';
@@ -53,5 +53,7 @@ const runTestsAndSync = async () => {
   process.exitCode = code;
 };
 
-runTestsAndSync();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await runTestsAndSync();
+}
 export { runJest, runTestsAndSync };
